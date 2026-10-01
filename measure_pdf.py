@@ -377,6 +377,14 @@ def group_paragraphs(lines: list[dict]) -> list[list[dict]]:
     for prev, cur in zip(lines, lines[1:]):
         gap = cur["top"] - prev["bottom"]
         new = gap > 0.55 * lh or cur.get("bullet") or abs(cur.get("size", 0) - prev.get("size", 0)) > 1.5
+        # a change of left edge also starts a new paragraph (except a first-line indent on line 2)
+        if not new and abs(cur["x0"] - prev["x0"]) > 0.3 * PT_PER_CM and len(paras[-1]) >= 2:
+            new = True
+        if not new and len(paras[-1]) == 2 and abs(paras[-1][1]["x0"] - paras[-1][0]["x0"]) > 0.3 * PT_PER_CM \
+                and abs(cur["x0"] - paras[-1][1]["x0"]) > 0.3 * PT_PER_CM:
+            # the "first-line indent" guess was wrong: split before the 2nd line
+            second = paras[-1].pop()
+            paras.append([second])
         if new:
             paras.append([cur])
         else:
@@ -610,6 +618,11 @@ def analyse_digital_page(page, pno: int) -> list[str]:
 
     for bx in boxes:
         tx = [l for l in body if inside(l, bx, 3)]
+        if not tx and not bx.get("shade_only") and (bx["x1"] - bx["x0"]) > 0.8 * PT_PER_CM and (bx["bottom"] - bx["top"]) > 0.8 * PT_PER_CM \
+                and (bx["x1"] - bx["x0"]) < 0.9 * (tr - tl):
+            rep.append(f"  Shape/box (no text): {fmt(bx['x1'] - bx['x0'])} wide x {fmt(bx['bottom'] - bx['top'])} high, "
+                       f"{fmt(bx['x0'] - tl)} from the left margin, {fmt(bx['top'])} from page top.")
+            continue
         if not tx or (bx["x1"] - bx["x0"]) > 0.98 * (tr - tl) + 30 and (bx["bottom"] - bx["top"]) > 0.6 * H:
             continue
         a, b = (tl, tr) if full_width(bx) else column_of(bx)
